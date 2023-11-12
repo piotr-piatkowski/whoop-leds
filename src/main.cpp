@@ -2,6 +2,12 @@
 #include <FastLED.h>
 #define NUM_LEDS 81
 
+#define BLYNK_PRINT Serial
+#include "secrets.hpp"
+
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+
 CRGB leds[NUM_LEDS];
 
 /*
@@ -24,8 +30,8 @@ Segments placement and directions:
   |      |
 */
 
-// Directions of segments - so you can always draw them from left to right and top to bottom
-// 1 means reversed, 0 means normal
+// Directions of segments - so you can always draw them from left to right
+// and top to bottom: 1 means reversed, 0 means normal
 int segment_dirs[9] = {
     1, // 0
     1, // 1
@@ -70,6 +76,42 @@ void digit(int d, CRGB col) {
   }
 }
 
+BlynkTimer uptime_timer;
+
+void blynk_send_uptime()
+{
+  Blynk.virtualWrite(V2, millis() / 1000);
+}
+
+BLYNK_CONNECTED() {
+  Serial.println("Blynk connected");
+  Blynk.syncAll();
+}
+
+bool leds_on = true;
+int current_digit = 0;
+CRGB digit_color = CRGB::White;
+
+BLYNK_WRITE(V0) {
+  current_digit = param.asInt();
+  Serial.println("V0=" + String(current_digit));
+}
+
+BLYNK_WRITE(V1) {
+  leds_on = (bool)param.asInt();
+  Serial.println("V1=" + String(leds_on));
+}
+
+BLYNK_WRITE(V3) {
+  int red = param[0].asInt();
+  int green = param[1].asInt();
+  int blue = param[2].asInt();
+  digit_color = CRGB(red, green, blue);
+  Serial.println("red=" + String(red) + ", " +
+                 "green=" + String(green) + ", " + 
+                 "blue=" + String(blue));
+}
+
 int counter = 9;
 
 void setup()
@@ -78,7 +120,11 @@ void setup()
   Serial.begin(115200);
   Serial.println("Starting");
 
-  FastLED.addLeds<WS2811, D1, BRG>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  Blynk.begin(BLYNK_AUTH_TOKEN, WIFI_SSID, WIFI_PASS);
+  uptime_timer.setInterval(1000L, blynk_send_uptime);
+
+  FastLED.addLeds<WS2811, D1, BRG>(leds, NUM_LEDS)
+    .setCorrection(TypicalLEDStrip);
 
   Serial.println("Start done");
 }
@@ -87,18 +133,13 @@ CRGB cols[3] = {CRGB::Red, CRGB::Green, CRGB::Blue};
 
 void loop()
 {
-  u8 sec = counter % 10;
-  CRGB col = sec < 3 ? CRGB::Red : (sec < 6 ? CRGB::Yellow : CRGB::Green);
-  Serial.println("sec=" + String(sec) + ", col=" + String(col.r) + "," + String(col.g) + "," + String(col.b));
-  digit(sec, col);
-  FastLED.show();
-
-  if (counter == 0) {
-    counter = 9;
+  Blynk.run();
+  uptime_timer.run();
+  if (leds_on) {
+    digit(current_digit, digit_color);
   }
-
-  //Serial.println("Colors sent");
-  //Serial.println("counter=" + String(counter));
-  delay(1000);
-  counter--;
+  else {
+    FastLED.clear();
+  }
+  FastLED.show();
 }
