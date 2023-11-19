@@ -1,14 +1,16 @@
-#define FASTLED_ESP8266_RAW_PIN_ORDER
-#include <FastLED.h>
-#define NUM_LEDS 81
+// #define FASTLED_ESP8266_RAW_PIN_ORDER
+// #include <FastLED.h>
+// #define NUM_LEDS 81
+
+#include <WS2812FX.h>
+
+WS2812FX leds = WS2812FX(81, D1, NEO_BRG + NEO_KHZ400);
 
 #define BLYNK_PRINT Serial
 #include "secrets.hpp"
 
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
-
-CRGB leds[NUM_LEDS];
 
 /*
 Segments placement and directions:
@@ -57,16 +59,13 @@ int digit_segments[][10] = {
     {2, 3, 4, 5, 7, 8, -1}     // 9
 };
 
-void set_segment(int segment, CRGB col) {
+void set_segment(int segment, uint32_t col) {
   int start = segment * 9;
-  int end = start + 9;
-  for (int i = start; i < end; i++) {
-    leds[i] = col;
-  }
+//  leds.setSegment(segment, start, start+8, FX_MODE_STATIC, col, 0, false);
 }
 
-void digit(int d, CRGB col) {
-  FastLED.clear();
+void digit(int d, uint32_t col) {
+//  leds.setColor(0);
   for (int i = 0; i < 10; i++) {
     int segment = digit_segments[d][i];
     if (segment == -1) {
@@ -90,7 +89,7 @@ BLYNK_CONNECTED() {
 
 bool leds_on = true;
 int current_digit = 0;
-CRGB digit_color = CRGB::White;
+uint32_t digit_color = 0x00FFFFFF;
 
 BLYNK_WRITE(V0) {
   current_digit = param.asInt();
@@ -106,10 +105,22 @@ BLYNK_WRITE(V3) {
   int red = param[0].asInt();
   int green = param[1].asInt();
   int blue = param[2].asInt();
-  digit_color = CRGB(red, green, blue);
   Serial.println("red=" + String(red) + ", " +
                  "green=" + String(green) + ", " + 
                  "blue=" + String(blue));
+  digit_color = (uint32_t)red << 16 | (uint32_t)green << 8 | (uint32_t)blue;
+}
+
+BLYNK_WRITE(V5) {
+  int mode = param.asInt();
+  Serial.println("V5=" + String(mode));
+  leds.setMode(mode);
+}
+
+BLYNK_WRITE(V6) {
+  int speed = param.asInt();
+  Serial.println("V5=" + String(speed));
+  leds.setSpeed(speed);
 }
 
 int counter = 9;
@@ -123,23 +134,29 @@ void setup()
   Blynk.begin(BLYNK_AUTH_TOKEN, WIFI_SSID, WIFI_PASS);
   uptime_timer.setInterval(1000L, blynk_send_uptime);
 
-  FastLED.addLeds<WS2811, D1, BRG>(leds, NUM_LEDS)
-    .setCorrection(TypicalLEDStrip);
+  // FastLED.addLeds<WS2811, D2, BRG>(leds, NUM_LEDS)
+  //   .setCorrection(TypicalLEDStrip);
+
+  leds.init();
+  leds.setBrightness(200);
+  leds.setMode(FX_MODE_STROBE_RAINBOW);
+  leds.setSpeed(10);
+  leds.start();
 
   Serial.println("Start done");
 }
-
-CRGB cols[3] = {CRGB::Red, CRGB::Green, CRGB::Blue};
 
 void loop()
 {
   Blynk.run();
   uptime_timer.run();
-  if (leds_on) {
-    digit(current_digit, digit_color);
-  }
-  else {
-    FastLED.clear();
-  }
-  FastLED.show();
+
+  leds.service();
+  // if (leds_on) {
+  //   digit(current_digit, digit_color);
+  // }
+  // else {
+  //   FastLED.clear();
+  // }
+  // FastLED.show();
 }
